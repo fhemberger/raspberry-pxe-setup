@@ -1,0 +1,89 @@
+---
+- name: Create config.txt for clients
+  copy:
+    content: |
+      arm_64bit=1
+
+      # Reduce memory reserved for GPU
+      gpu_mem=16
+
+      # Cut-down version with no support hardware blocks like codecs and 3D, and for use when gpu_mem=16
+      start_file=start_cd.elf
+      fixup_file=fixup_cd.dat
+
+      # Skip LCD detection phase
+      ignore_lcd=1
+
+      # Enable hardware watchdog, automatic reboots when device hangs
+      dtparam=watchdog=on
+
+      # Disable Bluetooth and WiFi, unless you're going to use it
+      dtoverlay=disable-bt
+      dtoverlay=disable-wifi
+    dest: "{{ pxe_base_path }}/tftpboot/{{ item.mac_address }}/config.txt"
+    owner: nobody
+    group: nobody
+    mode: 0644
+  with_items: "{{ pxe_clients }}"
+
+- name: Enable ssh for clients
+  file:
+    path: "{{ pxe_base_path }}/tftpboot/{{ item.mac_address }}/ssh"
+    state: touch
+    owner: nobody
+    group: nobody
+    mode: 0644
+    modification_time: preserve
+    access_time: preserve
+  with_items: "{{ pxe_clients }}"
+
+- name: Create cmdline.txt for clients
+  copy:
+    content: >
+      console=serial0,115200
+      console=tty1
+      ip=dhcp
+      root=/dev/nfs
+      nfsroot={{ ansible_default_ipv4.address }}:{{ pxe_base_path }}/root/{{ item.mac_address }}/,vers=4.1,proto=tcp
+      rw
+      rootwait
+      init=/lib/systemd/systemd
+      elevator=deadline
+    dest: "{{ pxe_base_path }}/tftpboot/{{ item.mac_address }}/cmdline.txt"
+    owner: nobody
+    group: nobody
+    mode: 0644
+  with_items: "{{ pxe_clients }}"
+
+- name: Create /etc/fstab for clients
+  template:
+    src: templates/fstab.j2
+    dest: "{{ pxe_base_path }}/root/{{ item.mac_address }}/etc/fstab"
+  with_items: "{{ pxe_clients }}"
+
+- name: Create /etc/hostname for clients
+  copy:
+    content: "{{ item.hostname }}"
+    dest: "{{ pxe_base_path }}/root/{{ item.mac_address }}/etc/hostname"
+  with_items: "{{ pxe_clients }}"
+
+- name: Create ssh directory for user 'pi'
+  file:
+    path: "{{ pxe_base_path }}/root/{{ item.mac_address }}/home/pi/.ssh"
+    state: directory
+    owner: 1000
+    group: 1000
+    mode: 0700
+  with_items: "{{ pxe_clients }}"
+
+- name: Copy SSH key
+  vars:
+    local_home: "{{ lookup('env','HOME') }}"
+  lineinfile:
+    line: "{{ lookup('file', local_home + '/.ssh/id_ed25519.pub') }}"
+    path: "{{ pxe_base_path }}/root/{{ item.mac_address }}/home/pi/.ssh/authorized_keys"
+    create: yes
+    owner: 1000
+    group: 1000
+    mode: 0600
+  with_items: "{{ pxe_clients }}"

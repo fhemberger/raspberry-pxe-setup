@@ -1,0 +1,5 @@
+{{ "%-40s  %-10s  %-10s  %-40s  %d  %d" | format(ansible_default_ipv4.address + ":" + pxe_base_path + "/tftpboot", "/boot", "nfs", "ro,suid,nodev,exec,auto,nouser,async,vers=4.1,proto=tcp", 0, 0) }}
+{#
+{{ "%-40s  %-10s  %-10s  %-40s  %d  %d" | format("proc", "/proc", "proc", "defaults", 0, 0) }}
+{{ "%-40s  %-10s  %-10s  %-40s  %d  %d" | format("tmpfs", "/tmp", "tmpfs", "rw,nodev,nosuid,size=1G,noatime", 0, 0) }}
+#}

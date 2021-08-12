@@ -1,0 +1,6 @@
+*.pyc
+
+# Ansible
+*.retry
+ansible.tmp
+.ansible_download_cache

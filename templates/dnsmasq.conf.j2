@@ -1,0 +1,8 @@
+port=0
+dhcp-range={{ ansible_default_ipv4.broadcast }},proxy
+dhcp-leasefile={{ pxe_base_path }}/dnsmasq.leases
+log-dhcp
+enable-tftp
+tftp-root={{ pxe_base_path }}/tftpboot
+tftp-unique-root=mac
+pxe-service=0,"Raspberry Pi Boot"

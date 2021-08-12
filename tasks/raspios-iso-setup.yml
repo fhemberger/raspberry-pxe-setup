@@ -1,0 +1,128 @@
+---
+- name: Get overview of RaspiOS Lite ARM64 images
+  uri:
+    url: https://downloads.raspberrypi.org/raspios_lite_arm64/images/
+    return_content: yes
+  register: _raspios_images_html
+
+- name: Set latest image directory name
+  set_fact: _raspios_latest_image_directory="{{ _raspios_images_html.content | regex_findall('(?<=<a href=\")raspios_lite_arm64-\d{4}-\d{2}-\d{2}') | last }}"
+
+- name: Get latest download filenames
+  uri:
+    url: "https://downloads.raspberrypi.org/raspios_lite_arm64/images/{{ _raspios_latest_image_directory }}"
+    return_content: yes
+  register: _raspios_download_html
+
+- name: Set latest image download name
+  set_fact: _raspios_latest_image="{{ _raspios_download_html.content | regex_findall('(?<=<a href=\")[\w\d-]+?(?=\.zip\")') | first }}"
+
+- name: Create temporary download directory if it does not exist
+  delegate_to: localhost
+  become: no
+  file:
+    path: "{{ playbook_dir }}/.ansible_download_cache"
+    state: directory
+    mode: 0755
+
+- name: Download latest RaspiOS Lite ARM64 image and verify SHA256 checksum
+  delegate_to: localhost
+  become: no
+  get_url:
+    url: "https://downloads.raspberrypi.org/raspios_lite_arm64/images/{{ _raspios_latest_image_directory }}/{{ _raspios_latest_image }}.zip"
+    dest: "{{ playbook_dir }}/.ansible_download_cache/{{ _raspios_latest_image }}.zip"
+    checksum: "sha256:https://downloads.raspberrypi.org/raspios_lite_arm64/images/{{ _raspios_latest_image_directory }}/{{ _raspios_latest_image }}.zip.sha256"
+
+- name: Extract image
+  unarchive:
+    src: "{{ playbook_dir }}/.ansible_download_cache/{{ _raspios_latest_image }}.zip"
+    creates: "{{ pxe_base_path }}/{{ _raspios_latest_image }}.img"
+    dest: "{{ pxe_base_path }}"
+  environment:
+    PATH: /opt/bin:{{ ansible_env.PATH }}
+
+- name: Get first available loop device
+  command: losetup -f
+  register: _losetup_command
+
+- name: Set loop device
+  set_fact: loop_device="{{ _losetup_command.stdout }}"
+
+- name: Setup loop device
+  command: "losetup {{ loop_device }} {{ pxe_base_path }}/{{ _raspios_latest_image }}.img"
+
+- name: Probe image partitions
+  command: "partprobe {{ loop_device }}"
+
+- name: Mount boot partition of image
+  mount:
+    path: /tmp/raspios/boot
+    src: "{{ loop_device }}p1"
+    fstype: vfat
+    opts: ro
+    state: mounted
+
+- name: Create boot directory for clients
+  file:
+    path: "{{ pxe_base_path }}/tftpboot/{{ item.mac_address }}"
+    state: directory
+    owner: nobody
+    group: nobody
+    mode: 0755
+  with_items: "{{ pxe_clients }}"
+
+- name: Copy boot partition
+  # -a  : all files, with permissions, etc.
+  # -x  : stay on one file system
+  # -H  : preserve hard links (not included with -a)
+  # -A  : preserve ACLs/permissions (not included with -a)
+  # -X  : preserve extended attributes (not included with -a)
+  # -W  : copy whole file
+  # -S  : handle sparse files efficiently
+  command: >-
+    rsync
+    -axHAXWS
+    --ignore-existing
+    /tmp/raspios/boot/
+    {{ pxe_base_path }}/tftpboot/{{ item.mac_address }}/
+  with_items: "{{ pxe_clients }}"
+
+- name: Unmount boot partition
+  mount: path=/tmp/raspios/boot state=unmounted
+
+- name: Mount root partition of image
+  mount:
+    path: /tmp/raspios/root
+    src: "{{ loop_device }}p2"
+    fstype: ext4
+    opts: ro
+    state: mounted
+
+- name: Create root directory for clients
+  file:
+    path: "{{ pxe_base_path }}/root/{{ item.mac_address }}"
+    state: directory
+    mode: 0755
+  with_items: "{{ pxe_clients }}"
+
+- name: Copy root disk for clients
+  # -a  : all files, with permissions, etc.
+  # -x  : stay on one file system
+  # -H  : preserve hard links (not included with -a)
+  # -A  : preserve ACLs/permissions (not included with -a)
+  # -X  : preserve extended attributes (not included with -a)
+  # -W  : copy whole file
+  # -S  : handle sparse files efficiently
+  command: >-
+    rsync
+    -axHAXWS
+    --ignore-existing
+    /tmp/raspios/root/
+    {{ pxe_base_path }}/root/{{ item.mac_address }}/
+  with_items: "{{ pxe_clients }}"
+
+- name: Unmount root partition
+  mount: path=/tmp/raspios/root state=unmounted
+
+- name: Free loop device
+  command: "losetup -d {{ loop_device }}"

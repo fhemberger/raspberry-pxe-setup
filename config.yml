@@ -1,0 +1,18 @@
+---
+# Location on `pxe_server`, where everything will be installed
+pxe_base_path: /volume2/pxe
+
+# List of PXE clients (allows individual configuration based on MAC address)
+#
+# Get MAC address of Raspberry Pi:
+# ethtool -P $(ls /sys/class/net | grep en) | awk '{gsub(/:/, "-", $3); print $3}'
+#
+# Get serial number:
+# grep Serial /proc/cpuinfo | cut -d ' ' -f 2 | cut -c 8-16
+pxe_clients:
+  - hostname: pi1
+    mac_address: b8-27-eb-4b-5c-ad
+    serial: 08e4b5cad
+  - hostname: pi2
+    mac_address: b8-27-eb-e6-f9-aa
+    serial: 057e6f9aa

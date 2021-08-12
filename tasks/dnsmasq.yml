@@ -1,0 +1,27 @@
+---
+- name: Install dnsmasq
+  package: name=dnsmasq state=present
+  when: ansible_cmdline['syno_hw_version'] is not defined
+
+- name: Install dnsmasq (opkg/Synology)
+  package: name=dnsmasq state=present
+  # opkg exits with 1 if package is already installed
+  failed_when: False
+  when: ansible_cmdline['syno_hw_version'] is defined
+
+- name: Copy dnsmasq config
+  template:
+    src: templates/dnsmasq.conf.j2
+    dest: "{{ pxe_base_path }}/dnsmasq.conf"
+
+- name: Copy dnsmasq service template
+  template:
+    src: templates/dnsmasq.service.j2
+    dest: /etc/systemd/system/dnsmasq-pxe.service
+    mode: 0644
+
+- name: Start dnsmasq service
+  service:
+    name: dnsmasq-pxe
+    state: restarted
+    enabled: yes

@@ -1,0 +1,25 @@
+#!/usr/bin/env ansible-playbook --inventory=hosts.ini
+---
+- hosts: pxe_server
+
+  pre_tasks:
+    - name: Load configuration
+      include_vars: config.yml
+
+  tasks:
+    - include_tasks: file="tasks/{{ item }}.yml"
+      loop:
+        - raspios-iso-setup
+        - raspberrypi-client-config
+        - dnsmasq
+
+    - name: Firewall config reminder
+      debug:
+        msg: |
+          The following ports must be allowed in the host's firewall:
+
+          67/udp (DHCP proxy)
+          69/udp (TFTP)
+          4011/udp (DHCP proxy)
+
+          See: `netstat -ulpn | grep dnsmasq`
